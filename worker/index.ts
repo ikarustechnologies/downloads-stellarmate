@@ -12,12 +12,15 @@ export { WorkflowStatusDO } from "./durable-object";
  * - GET /ws - WebSocket connection for real-time updates
  */
 export default {
-	async fetch(request: Request, env: Env): Promise<Response> {
+	async fetch(request: Request, env: Env): Promise<Response>
+	{
 		const url = new URL(request.url);
 
 		// API: Start a new workflow instance
-		if (url.pathname === "/api/workflow/start" && request.method === "POST") {
-			try {
+		if (url.pathname === "/api/workflow/start" && request.method === "POST")
+		{
+			try
+			{
 				const instance = await env.MY_WORKFLOW.create({
 					params: {
 						timestamp: Date.now(),
@@ -28,7 +31,8 @@ export default {
 					instanceId: instance.id,
 					message: "Workflow started successfully",
 				});
-			} catch {
+			} catch
+			{
 				return Response.json(
 					{ error: "Failed to start workflow" },
 					{ status: 500 },
@@ -37,20 +41,24 @@ export default {
 		}
 
 		// API: Get workflow status
-		if (url.pathname.startsWith("/api/workflow/status/")) {
+		if (url.pathname.startsWith("/api/workflow/status/"))
+		{
 			const instanceId = url.pathname.split("/").pop();
-			if (!instanceId) {
+			if (!instanceId)
+			{
 				return Response.json(
 					{ error: "Instance ID required" },
 					{ status: 400 },
 				);
 			}
 
-			try {
+			try
+			{
 				const instance = await env.MY_WORKFLOW.get(instanceId);
 				const status = await instance.status();
 				return Response.json(status);
-			} catch {
+			} catch
+			{
 				return Response.json(
 					{ error: "Failed to get workflow status" },
 					{ status: 500 },
@@ -62,16 +70,19 @@ export default {
 		if (
 			url.pathname.startsWith("/api/workflow/event/") &&
 			request.method === "POST"
-		) {
+		)
+		{
 			const instanceId = url.pathname.split("/").pop();
-			if (!instanceId) {
+			if (!instanceId)
+			{
 				return Response.json(
 					{ error: "Instance ID required" },
 					{ status: 400 },
 				);
 			}
 
-			try {
+			try
+			{
 				const body = (await request.json()) as {
 					approved: boolean;
 					comment?: string;
@@ -87,7 +98,8 @@ export default {
 					success: true,
 					message: "Event sent successfully",
 				});
-			} catch {
+			} catch
+			{
 				return Response.json(
 					{ error: "Failed to send event" },
 					{ status: 500 },
@@ -96,30 +108,51 @@ export default {
 		}
 
 		// WebSocket: Connect to workflow status updates
-		if (url.pathname === "/ws") {
+		if (url.pathname === "/ws")
+		{
 			const instanceId = url.searchParams.get("instanceId");
-			if (!instanceId) {
+			if (!instanceId)
+			{
 				return new Response("instanceId query parameter required", {
 					status: 400,
 				});
 			}
 
 			const upgradeHeader = request.headers.get("Upgrade");
-			if (upgradeHeader !== "websocket") {
+			if (upgradeHeader !== "websocket")
+			{
 				return new Response("Expected Upgrade: websocket", { status: 426 });
 			}
 
-			try {
+			try
+			{
 				const doId = env.WORKFLOW_STATUS.idFromName(instanceId);
 				const stub = env.WORKFLOW_STATUS.get(doId);
 				return stub.fetch(request);
-			} catch {
+			} catch
+			{
 				return new Response("Failed to establish WebSocket connection", {
 					status: 500,
 				});
 			}
 		}
 
-		return Response.json({ error: "Not Found" }, { status: 404 });
+		// R2 download proxy — all other paths are proxied to the private R2 bucket.
+		// The request includes a pre-signed signature from Odoo, and the Worker
+		// makes an outbound fetch with the correct Host header so the signature
+		// validates against the R2 endpoint.
+		const r2Url = `${env.R2_ENDPOINT}${url.pathname}${url.search}`;
+		const headers = new Headers();
+		if (request.headers.has('Range'))
+		{
+			headers.set('Range', request.headers.get('Range')!);
+		}
+
+		const response = await fetch(r2Url, { headers });
+
+		return new Response(response.body, {
+			status: response.status,
+			headers: response.headers,
+		});
 	},
 } satisfies ExportedHandler<Env>;

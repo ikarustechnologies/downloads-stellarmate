@@ -49,5 +49,8 @@
 			"new_sqlite_classes": ["WorkflowStatusDO"]
 		}
 	],
-	"upload_source_maps": true
+	"upload_source_maps": true,
+	"vars": {
+		"R2_ENDPOINT": "https://5e5285cf1b9eb7506741eac1c1c71361.r2.cloudflarestorage.com"
+	}
 }
